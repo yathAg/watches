@@ -26,14 +26,14 @@ Two closure variants share every internal part:
   CRYSTAL     Dummy disc for fit tests. The real part is a 38 x 1.5 flat mineral crystal.
 
 Sources
-  MK II STLs   instructibles_prod/Watch_Body_-_MK_II.stl and Watch_Ring_-_MK_II.stl, measured 2026-11-11:
+  MK II STLs   watches/wrist_watch/instructibles_archive/Watch_Body_-_MK_II.stl and Watch_Ring_-_MK_II.stl, measured 2026-11-11:
                - case D42.0, bore D38.6, lug gap 20.0, lug-to-lug 51.0;
                - spring-bar holes D1.0, drilled through, at y +-24.07, 2.86 above the lug bottom;
                - floor 1.2;
                - PCB ledge r 15.5-17.7, 4.8 above the floor. Its footprint is reused below.
                - gap from PCB top to crystal 2.5; crystal recess D38.1 x 1.5;
                - button window 7.9 x 3.9, centred 2.55 above the floor at 3 o'clock.
-  Watch PCB    gerbers (instructibles_prod/FLVZX1QJUSNBBNV.zip):
+  Watch PCB    gerbers (watches/wrist_watch/instructibles_archive/FLVZX1QJUSNBBNV.zip):
                - D35.2 x 1.57;
                - side switch, THT pins at (14.3, +1.14 / -1.40), on the underside;
                - CR2032 holder underneath;
@@ -57,8 +57,8 @@ Print (exported files are already oriented, min Z = 0). 0.08 mm layers (finest),
 Hardware: 1x M2x5 flat-head screw (DIN 965) as the crown stem; or file a freed M2x6 ring screw down
 to 5 mm; or use the M2x6 with crown_M2x6. Also 2x 20 mm spring bars and a 38 x 1.5 crystal.
 
-    python watch_case.py           ->  *_V1.stl/.step, render_A.png, render_B.png, render_parts.png and one
-                                       Bambu plate per lab order (PLATES): watch_case_black_V1.3mf (PLA black),
+    python watch_case.py           ->  print/*_V1.stl, cad/*_V1.step, renders/render_{A,B,parts}.png and one
+                                       Bambu plate per lab order (PLATES) in print/: watch_case_black_V1.3mf (PLA black),
                                        watch_case_silver_V1.3mf (PLA silver accents), watch_case_carriers_V1.3mf
                                        (PETG black)
     python watch_case.py --plates  ->  only re-plate from the exported STLs
@@ -77,6 +77,7 @@ from build123d import (Axis, Compound, Plane, Polyline, Pos, Rot, export_step, e
 from manifold3d import CrossSection, FillRule, JoinType, Manifold, Mesh, OpType
 
 HERE = Path(__file__).parent
+PRINT, CAD, RENDERS = HERE / "print", HERE / "cad", HERE / "renders"
 SEG = 128
 VER = "V1"
 
@@ -201,7 +202,7 @@ B_DETENT, B_LOCK_DROP = 0.2, 0.45
 B_FLOOR_G = B_LUG_Z[0] - B_DETENT - 0.15
 BEZ_FLUTES, BEZ_FLUTE_D = 72, 0.6
 
-OUT = {k: HERE / f"{k}_{VER}" for k in
+OUT = {k: PRINT / f"{k}_{VER}" for k in                 # .step goes to CAD
        ("case_A", "caseback_A", "case_B", "bezel_B", "dial_ring", "crystal_dummy",
         "crown_M2x5", "crown_M2x6", "carrier_t06", "carrier_t07", "carrier_t08")}
 PLATES = {   # one lab order each (one material + colour per order). "silver" = the visible accent parts,
@@ -310,8 +311,8 @@ def load_stl(path, offset):
 
 
 def mk2_file(name):
-    for c in (HERE.parent / "instructibles_prod" / name,
-              HERE.parent.parent / "binary_watch" / "binary_watch" / "wrist_watch" / "instructibles_prod" / name):
+    for c in (HERE.parents[2] / "instructibles_archive" / name,                                # copy in the watches repo
+              HERE.parents[1] / "watches" / "wrist_watch" / "instructibles_archive" / name):  # 3Dprints master copy
         if c.exists():
             return c
     raise FileNotFoundError(name)
@@ -715,7 +716,7 @@ def assembly_checks(M):
 # ---------- export / plates ----------
 def export(part, out):
     export_stl(part, str(out.with_suffix(".stl")), tolerance=0.01, angular_tolerance=0.1)
-    export_step(part, str(out.with_suffix(".step")))
+    export_step(part, str(CAD / out.with_suffix(".step").name))
     bb = part.bounding_box()
     assert abs(bb.min.Z) < 1e-3, f"{out.name} min Z {bb.min.Z}"
 
@@ -724,10 +725,11 @@ def write_plate(path, name, parts, colour, width=190.0, gap=6.0):
     """Shelf-pack print-oriented manifolds [(name, Manifold)] into rows <= width, write a Bambu project 3MF
     (one filament, template is PLA: the technician applies the ordered material's profile), then set the
     layer height and wall count."""
-    sys.path.insert(0, str(HERE.parent / "tambola"))
+    sys.path[:0] = [str(HERE.parent / "_shared"),                 # 3Dprints master copy
+                    str(HERE.parents[4] / "3Dprints" / "_shared")]  # copy in the watches repo
     try:
         import functools
-        import bambu3mf                                  # shared Bambu project writer (3Dprints/tambola)
+        import bambu3mf                                  # shared Bambu project writer (3Dprints/_shared)
         if not hasattr(bambu3mf._filament_keys, "cache_info"):    # it reads ~1900 profile JSONs per call
             bambu3mf._filament_keys = functools.lru_cache(None)(bambu3mf._filament_keys)
     except ImportError:
@@ -763,7 +765,7 @@ def make_plates():
     """One Bambu project per lab order, built from the exported (print-oriented) STLs."""
     for key, (colour, label, names) in PLATES.items():
         parts = [(n, load_stl(OUT[n].with_suffix(".stl"), np.zeros(3))) for n in names]
-        write_plate(HERE / f"watch_case_{key}_{VER}.3mf", f"watch_case_{key}", parts, colour)
+        write_plate(PRINT / f"watch_case_{key}_{VER}.3mf", f"watch_case_{key}", parts, colour)
         print(f"    {key}: {label}: {', '.join(names)}")
 
 
@@ -862,7 +864,7 @@ def renders(M, prints):
         ax.set_xlim(-28, 30); ax.set_ylim(-40, 40); ax.set_aspect("equal"); ax.grid(alpha=0.3)
         ax.set_title("top: case z=1 (black), MK II z=3 (dashed), carrier z=3 (orange), straps")
         plt.tight_layout()
-        plt.savefig(HERE / f"render_{var}.png", dpi=75)
+        plt.savefig(RENDERS / f"render_{var}.png", dpi=75)
         plt.close(fig)
     # print-oriented parts
     fig = plt.figure(figsize=(20, 11))
@@ -875,7 +877,7 @@ def renders(M, prints):
         ax.set_xlim(c[0] - r, c[0] + r); ax.set_ylim(c[1] - r, c[1] + r); ax.set_zlim(0, 2 * r)
         ax.set_box_aspect((1, 1, 1)); ax.view_init(30, -60); ax.set_axis_off(); ax.set_title(n + " (as printed)")
     plt.tight_layout()
-    plt.savefig(HERE / "render_parts.png", dpi=70)
+    plt.savefig(RENDERS / "render_parts.png", dpi=70)
     plt.close(fig)
 
 
