@@ -18,18 +18,18 @@ The parametric source is `watch_case.py` (build123d + manifold3d); everything he
 | Caseback A | `caseback_A_V1` | **Push and twist** (bayonet). It clamps the whole stack against the lip, so no glue anywhere. Has a coin slot. |
 | Case B | `case_B_V1` | Closed back, like MK II. |
 | Bezel B | `bezel_B_V1` | **Twist-lock** ring with a ramp and a click, like the programmer-jig lid. Holds the crystal (glued, as in MK II). Its inner lip clamps the PCB. |
-| Carrier | `carrier_t05/06/07_V1` | Fits both cases. Holds and centres the PCB, keyed so it cannot turn. 4 leaf springs push the PCB up: they take up tolerance and make the twist-lock click. A flexure tongue is the crown's return spring. Tongue thickness is 0.5 / 0.6 / 0.7 mm, giving soft / medium / firm crown feel. |
+| Carrier | `carrier_t06/07/08_V1` | Fits both cases. Holds and centres the PCB, keyed so it cannot turn. 4 leaf springs push the PCB up: they take up tolerance and make the twist-lock click. A flexure tongue is the crown's return spring. Its root is 0.6 / 0.7 / 0.8 mm thick, giving soft / medium / firm crown feel; the tip is 0.6 mm on all three so it clears the switch at full press. |
 | Dial ring | `dial_ring_V1` | For A. Spacer between the PCB rim and the crystal, with 12 ticks. It shows through the crystal, so an accent colour works well. |
-| Crown | `crown_M2x5_V1`, `crown_M2x6_V1` | Fluted cap that screws onto the stem. Use the one that matches your screw. |
+| Crown | `crown_M2x5_V1`, `crown_M2x6_V1` | Ø6 cap with 12 flutes that screws onto the stem. Use the one that matches your screw. |
 | Crystal dummy | `crystal_dummy_V1` | 38 × 1.5 disc for fit tests until the real crystal arrives. |
 
-There is one plate per lab order, because each order is one material and colour. Plates are Bambu Studio projects at 0.12 mm layers with 3 walls. Weights come from a Bambu Studio CLI slice and none of the plates gives a slicer warning. The dummy crystal is not printed.
+There is one plate per lab order, because each order is one material and colour. Plates are Bambu Studio projects at 0.08 mm layers (finest), 3 walls, Arachne wall generator. Weights come from a Bambu Studio CLI slice and none of the plates gives a slicer warning. The dummy crystal is not printed.
 
 | Order | Plate | Parts | Sliced |
 |---|---|---|---|
-| PLA, black | `watch_case_black_V1.3mf` | Case A, caseback A, case B, bezel B, dial ring, both crowns | 14.1 g, ~53 min |
-| PLA, silver | `watch_case_silver_V1.3mf` | Bezel B, dial ring, both crowns | 2.0 g, ~17 min |
-| PETG, black | `watch_case_carriers_V1.3mf` | The 3 carriers (flexures, so PETG) | 5.2 g (PLA template), ~39 min |
+| PLA, black | `watch_case_black_V1.3mf` | Case A, caseback A, case B, bezel B, dial ring, both crowns | 14.3 g, ~68 min |
+| PLA, silver | `watch_case_silver_V1.3mf` | Bezel B, dial ring, both crowns | 2.0 g, ~20 min |
+| PETG, black | `watch_case_carriers_V1.3mf` | The 3 carriers (flexures, so PETG) | 5.2 g (PLA template), ~53 min |
 
 The silver parts swap onto the black cases, so one set of cases gives four looks:
 
@@ -84,6 +84,16 @@ Renders: `render_A.png`, `render_B.png` (exploded view, crown section, bayonet s
 4. Bezel, with the crystal glued in.
 
 ## Printing (files are already oriented, no supports)
+Printability was checked by slicing every part each layer and removing anything a 0.4 mm nozzle line cannot fill.
+V1 fixes from that check:
+- The crown flutes were too fine. The cap is now Ø6 with 12 flutes, and the skirt wall is 0.8 mm.
+- Tick notches now cut through the inner edge, so no hairline sliver is left beside them.
+- The carrier ledge drops slivers thinner than 0.5 mm.
+
+What is still under 0.4 mm is cosmetic: about 0.1 mm³ per part, on chamfer corners.
+
+The carrier tongue (0.6 mm) is thin on purpose: a flexure printed as a 2-line wall. Print it in PETG.
+
 - Case A: back down.
 - Caseback: inner face down.
 - Case B: back down.

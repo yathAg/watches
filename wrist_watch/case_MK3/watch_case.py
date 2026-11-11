@@ -45,7 +45,7 @@ Sources
 Frame: origin on the case axis. +x = 3 o'clock (crown), +y = 12 o'clock, z up (crystal side).
 z = 0 is the inner floor: the caseback inner face in A, the floor top in B. Modelled assembled and locked.
 
-Print (exported files are already oriented, min Z = 0). 0.12 mm layers, 3-4 walls, NO supports.
+Print (exported files are already oriented, min Z = 0). 0.08 mm layers (finest), 3 walls, Arachne, NO supports.
   case_A        back face down. Lug bottoms are flat for FDM (LUG_DROP = 0).
   caseback_A    inner face down. The lugs are flush with it.
   case_B        back down.
@@ -62,6 +62,7 @@ to 5 mm; or use the M2x6 with crown_M2x6. Also 2x 20 mm spring bars and a 38 x 1
                                        watch_case_silver_V1.3mf (PLA silver accents), watch_case_carriers_V1.3mf
                                        (PETG black)
     python watch_case.py --plates  ->  only re-plate from the exported STLs
+    python watch_case.py --no-plates -> everything except the plates (fast)
 """
 import json
 import struct
@@ -136,11 +137,11 @@ STEM_HOLE_D = 2.3
 BOSS_D, BOSS_PROUD = 4.0, 0.4
 BOSS_END_R = CASE_R + BOSS_PROUD                   # 21.4
 TRAVEL = 0.5                                       # cap -> boss end at rest = hard stop (set by threading)
-CAP_D, CAP_SKIRT_H, CAP_END_T = 5.4, 0.4, 0.7
+CAP_D, CAP_SKIRT_H, CAP_END_T = 6.0, 0.4, 0.7        # skirt wall 0.8 (2 lines)
 CAP_SKIRT_ID = BOSS_D + 2 * SLIDE
 CAP_R0 = BOSS_END_R + TRAVEL                       # cap inner face at rest (21.9)
 PILOT_D = 1.6                                      # M2 self-taps into it
-CAP_FLUTES, FLUTE_D = 18, 0.8
+CAP_FLUTES, FLUTE_D, FLUTE_CUT = 12, 1.0, 0.35         # ridges ~0.6 wide: printable with a 0.4 nozzle
 SCREW_LENGTHS = (5.0, 6.0)
 
 # --- carrier (PCB holder / liner / springs) ---
@@ -153,7 +154,9 @@ LEAF_TIP_Z = SEAT_Z + LEAF_FREE                    # 5.15
 LEAF_T, LEAF_W, LEAF_R, LEAF_ROOT_Z = 0.6, 1.2, 16.55, 1.0
 LEAF_ANGLES_TRY = (50.0, 135.0, 180.0, 225.0)   # lower right is full of parts (MK II ledge is a 0.6 rim)
 LEDGE_R0 = 15.4
-TONGUE_TS = (0.5, 0.6, 0.7)                        # crown return spring (tangential cantilever)
+LEDGE_OPEN = 0.25                                  # drop ledge slivers < 0.5 mm (do not print)
+TONGUE_TS = (0.6, 0.7, 0.8)                        # crown return spring root thickness (soft/medium/firm)
+TONGUE_TIP_T = 0.6                                 # in front of the switch: travel stops on the switch body
 TONGUE_Z = (0.0, 4.5)                              # from the floor: prints as a wall (flexes sideways)
 WINDOW_A = (-26.0, 9.0)                            # sleeve window (deg); tongue root at WINDOW_A[0]
 TONGUE_FREE_A = 7.0
@@ -164,7 +167,7 @@ KEY_R_OUT = GROOVE_R - 0.25
 
 # --- dial ring (A) ---
 DIAL_IN, DIAL_OUT = 16.9, BORE_R - SLIDE           # rests on the PCB rim (clear of pads at r 16.65)
-TICK_R, TICK_W, TICK_D = (17.05, 18.0), 0.6, 0.4
+TICK_R, TICK_W, TICK_D = (DIAL_IN - 1.0, 18.0), 0.6, 0.4   # notches open through the inner edge
 
 # --- variant A: back-loading case + push-and-twist caseback ---
 A_BOT = -1.4
@@ -200,14 +203,14 @@ BEZ_FLUTES, BEZ_FLUTE_D = 72, 0.6
 
 OUT = {k: HERE / f"{k}_{VER}" for k in
        ("case_A", "caseback_A", "case_B", "bezel_B", "dial_ring", "crystal_dummy",
-        "crown_M2x5", "crown_M2x6", "carrier_t05", "carrier_t06", "carrier_t07")}
+        "crown_M2x5", "crown_M2x6", "carrier_t06", "carrier_t07", "carrier_t08")}
 PLATES = {   # one lab order each (one material + colour per order). "silver" = the visible accent parts,
              # which swap onto the black cases for the black + silver look.
     "black": ("#1A1A1C", "PLA, black", ["case_A", "caseback_A", "case_B", "bezel_B", "dial_ring",
                                         "crown_M2x5", "crown_M2x6"]),
     "silver": ("#B8B9BD", "PLA, silver", ["bezel_B", "dial_ring", "crown_M2x5", "crown_M2x6"]),
-    "carriers": ("#1A1A1C", "PETG, black", ["carrier_t05", "carrier_t06", "carrier_t07"])}
-LAYER_H = "0.12"
+    "carriers": ("#1A1A1C", "PETG, black", ["carrier_t06", "carrier_t07", "carrier_t08"])}
+LAYER_H = "0.08"                                  # finest Bambu profile for a 0.4 nozzle
 WALLS = "3"                                       # thin mechanical parts: 3 perimeters
 
 
@@ -374,10 +377,29 @@ def leaf_angles():
 LEAF_ANGLES = leaf_angles()
 
 
+def sector_cs(r0, r1, a0, a1, n=48):
+    a = np.radians(np.linspace(a0, a1, n))
+    pts = [(r1 * cos(t), r1 * sin(t)) for t in a] + [(r0 * cos(t), r0 * sin(t)) for t in a[::-1]]
+    return ncs([pts])
+
+
+def carrier_ledge_cs():
+    """MK II ledge footprint minus the carrier's full-height cuts (window, ledge relief, switch notch), opened
+    so no feature thinner than 2 * LEDGE_OPEN is left (it would not print), clipped back to the ledge band."""
+    cut = (sector_cs(SLEEVE_IN - 0.6, SLEEVE_OUT + 0.6, *WINDOW_A)
+           + sector_cs(PCB_R - 0.05, SLEEVE_IN + 0.2, WINDOW_A[0] - 2, WINDOW_A[1] + 2)
+           + ncs([[(SW_X0 - 0.4, -SW_W / 2 - 0.4), (SW_FRONT_R + 0.25, -SW_W / 2 - 0.4),
+                   (SW_FRONT_R + 0.25, SW_W / 2 + 0.4), (SW_X0 - 0.4, SW_W / 2 + 0.4)]]))
+    cs = (LEDGE_CS + annulus_cs(SLEEVE_IN, SLEEVE_OUT)) - cut.offset(0.05, JoinType.Miter)   # clear of the 3D cuts
+    cs = cs.offset(-LEDGE_OPEN, JoinType.Round, circular_segments=SEG).offset(
+        LEDGE_OPEN, JoinType.Round, circular_segments=SEG)
+    return (cs ^ LEDGE_CS).simplify(0.02)                 # ledge only (no band coincident with the sleeve)
+
+
 def carrier_part(tongue_t):
     body = revolve_rz([(SLEEVE_IN + 0.3, 0), (SLEEVE_OUT - 0.3, 0), (SLEEVE_OUT, 0.3), (SLEEVE_OUT, SLEEVE_TOP),
                        (SLEEVE_IN + 0.3, SLEEVE_TOP), (SLEEVE_IN, SLEEVE_TOP - 0.3), (SLEEVE_IN, 0.3)])
-    body = body + Compound(cs_to_parts(LEDGE_CS, 0, SEAT_Z))
+    body = body + Compound(cs_to_parts(carrier_ledge_cs(), 0, SEAT_Z))
     body = body + sector(SLEEVE_OUT - 0.3, KEY_R_OUT, KEY_ANG - ang(KEY_W / 2, SLEEVE_OUT),
                          KEY_ANG + ang(KEY_W / 2, SLEEVE_OUT), 0, SLEEVE_TOP)
     cuts = [sector(SLEEVE_IN - 0.6, SLEEVE_OUT + 0.6, WINDOW_A[0], WINDOW_A[1], -1, PCB_BOT),   # window
@@ -395,8 +417,10 @@ def carrier_part(tongue_t):
         leaves.append(Rot(0, 0, phi) * (Pos(LEAF_R, 0, 0) * prism_yz(leaf, -LEAF_W / 2, LEAF_W / 2)))
     body = body + Compound(leaves)
     # crown return tongue + pad (presses the screw head outward), hole for the actuator
-    body = body + sector(SLEEVE_OUT - tongue_t, SLEEVE_OUT, WINDOW_A[0] - 2.0, TONGUE_FREE_A, *TONGUE_Z)
-    body = body + rod_x(PAD_D, SLEEVE_OUT - tongue_t + 0.05, PAD_FACE_R, z=Z_CROWN)
+    tip_a = -ang(SW_W / 2 + 0.4, SLEEVE_OUT - 0.4)          # tongue thins to TONGUE_TIP_T in front of the switch
+    body = body + sector(SLEEVE_OUT - tongue_t, SLEEVE_OUT, WINDOW_A[0] - 2.0, tip_a, *TONGUE_Z)
+    body = body + sector(SLEEVE_OUT - TONGUE_TIP_T, SLEEVE_OUT, tip_a - 0.5, TONGUE_FREE_A, *TONGUE_Z)
+    body = body + rod_x(PAD_D, SLEEVE_OUT - TONGUE_TIP_T + 0.05, PAD_FACE_R, z=Z_CROWN)
     body = body - rod_x(PAD_HOLE_D, SLEEVE_IN - 1, PAD_FACE_R + 1, z=Z_CROWN)
     solids = sorted(body.solids(), key=lambda x: -x.volume)      # drop MK II ledge slivers cut loose
     if len(solids) > 1:                                           # by the switch notch / window
@@ -424,8 +448,9 @@ def crown_part(screw_len):
     r, ri = CAP_D / 2, CAP_SKIRT_ID / 2
     body = revolve_rz([(ri, -CAP_SKIRT_H), (r - 0.2, -CAP_SKIRT_H), (r, -CAP_SKIRT_H + 0.2), (r, length - 0.5),
                        (r - 0.5, length), (0, length), (0, 0), (ri, 0)])
-    fl = [disc((r + 0.1) * cos(2 * np.pi * k / CAP_FLUTES), (r + 0.1) * sin(2 * np.pi * k / CAP_FLUTES),
-               FLUTE_D, -CAP_SKIRT_H - 1, length - 0.6, 24) for k in range(CAP_FLUTES)]
+    rc = r + FLUTE_D / 2 - FLUTE_CUT
+    fl = [disc(rc * cos(2 * np.pi * k / CAP_FLUTES), rc * sin(2 * np.pi * k / CAP_FLUTES),
+               FLUTE_D, 0.25, length - 0.6, 24) for k in range(CAP_FLUTES)]       # grooves stop above the skirt
     return body - Compound(fl) - disc(0, 0, PILOT_D, -1, pilot, 32), length, engage
 
 
@@ -562,7 +587,7 @@ def bezel_b_part():
     for k in range(12):                                    # chapter ticks on the inner lip
         a = 90 - 30 * k
         hw = ang(TICK_W * (1.6 if k == 0 else 1.0) / 2, 17.5)
-        dots.append(sector(DIAL_IN + 0.3, BEZ_SKIRT_IN - 0.1, a - hw, a + hw, PCB_TOP + BEZ_LIP_T - TICK_D,
+        dots.append(sector(DIAL_IN - 1.0, BEZ_SKIRT_IN - 0.1, a - hw, a + hw, PCB_TOP + BEZ_LIP_T - TICK_D,
                            PCB_TOP + BEZ_LIP_T + 1))
     return body - Compound(fl + dots)
 
@@ -619,6 +644,8 @@ def static_checks():
     head_in = HEAD_TOP_R - TRAVEL
     act_tip = HEAD_TOP_R - SW_PRETRAVEL
     assert act_tip - head_in >= SW_TRAVEL, "crown travel does not actuate the switch"
+    tip_in = SLEEVE_OUT - TONGUE_TIP_T - (TRAVEL - (PAD_FACE_R - HEAD_TOP_R))
+    assert tip_in >= SW_FRONT_R - 1e-6, f"tongue hits the switch body before full travel ({tip_in:.2f})"
     for k, y in SHOULDER_Y.items():
         print(f"  strap {k:2d} o'clock: shoulder y {y:.2f}, gap to a {STRAP_T[k]} mm strap end {BAR_Y - STRAP_T[k] / 2 - y:.2f}")
     print(f"  crown: travel {TRAVEL}, switch pressed {act_tip - head_in:.2f} (travel {SW_TRAVEL}); "
@@ -724,11 +751,12 @@ def write_plate(path, name, parts, colour, width=190.0, gap=6.0):
     ps = json.loads(items["Metadata/project_settings.config"])
     ps["layer_height"] = LAYER_H
     ps["wall_loops"] = WALLS
+    ps["wall_generator"] = "arachne"                 # variable-width walls: thin flexures/lips
     items["Metadata/project_settings.config"] = json.dumps(ps, indent=4).encode()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zo:
         for k, v in items.items():
             zo.writestr(k, v)
-    print(f"  plate {path.name}: {len(parts)} parts, {x:.0f} x {y + row_h:.0f} mm, layer {LAYER_H}, {WALLS} walls")
+    print(f"  plate {path.name}: {len(parts)} parts, {x:.0f} x {y + row_h:.0f} mm, layer {LAYER_H}, {WALLS} walls, arachne")
 
 
 def make_plates():
@@ -900,6 +928,7 @@ if __name__ == "__main__":
     for n, p in prints + carrier_prints:
         export(p, OUT[n])
     print("exported", ", ".join(n for n, _ in prints + carrier_prints))
-    make_plates()
+    if "--no-plates" not in sys.argv:
+        make_plates()
     renders(M, prints + carrier_prints)
     print("wrote render_A.png, render_B.png, render_parts.png")
