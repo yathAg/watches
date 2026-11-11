@@ -57,8 +57,11 @@ Print (exported files are already oriented, min Z = 0). 0.12 mm layers, 3-4 wall
 Hardware: 1x M2x5 flat-head screw (DIN 965) as the crown stem; or file a freed M2x6 ring screw down
 to 5 mm; or use the M2x6 with crown_M2x6. Also 2x 20 mm spring bars and a 38 x 1.5 crystal.
 
-    python watch_case.py  ->  *_V1.stl/.step, watch_case_plate_V1.3mf, watch_case_carriers_V1.3mf,
-                              render_A.png, render_B.png, render_parts.png
+    python watch_case.py           ->  *_V1.stl/.step, render_A.png, render_B.png, render_parts.png and one
+                                       Bambu plate per lab order (PLATES): watch_case_black_V1.3mf (PLA black),
+                                       watch_case_silver_V1.3mf (PLA silver accents), watch_case_carriers_V1.3mf
+                                       (PETG black)
+    python watch_case.py --plates  ->  only re-plate from the exported STLs
 """
 import json
 import struct
@@ -198,9 +201,12 @@ BEZ_FLUTES, BEZ_FLUTE_D = 72, 0.6
 OUT = {k: HERE / f"{k}_{VER}" for k in
        ("case_A", "caseback_A", "case_B", "bezel_B", "dial_ring", "crystal_dummy",
         "crown_M2x5", "crown_M2x6", "carrier_t05", "carrier_t06", "carrier_t07")}
-OUT_PLATE = HERE / f"watch_case_plate_{VER}.3mf"
-OUT_CARRIERS = HERE / f"watch_case_carriers_{VER}.3mf"
-PLATE_COLOUR = "#2B2B2E"
+PLATES = {   # one lab order each (one material + colour per order). "silver" = the visible accent parts,
+             # which swap onto the black cases for the black + silver look.
+    "black": ("#1A1A1C", "PLA, black", ["case_A", "caseback_A", "case_B", "bezel_B", "dial_ring",
+                                        "crown_M2x5", "crown_M2x6"]),
+    "silver": ("#B8B9BD", "PLA, silver", ["bezel_B", "dial_ring", "crown_M2x5", "crown_M2x6"]),
+    "carriers": ("#1A1A1C", "PETG, black", ["carrier_t05", "carrier_t06", "carrier_t07"])}
 LAYER_H = "0.12"
 WALLS = "3"                                       # thin mechanical parts: 3 perimeters
 
@@ -687,9 +693,10 @@ def export(part, out):
     assert abs(bb.min.Z) < 1e-3, f"{out.name} min Z {bb.min.Z}"
 
 
-def write_plate(path, name, parts, width=190.0, gap=6.0):
-    """Shelf-pack print-oriented parts into rows <= width, write a Bambu project 3MF (one filament),
-    then set the layer height."""
+def write_plate(path, name, parts, colour, width=190.0, gap=6.0):
+    """Shelf-pack print-oriented manifolds [(name, Manifold)] into rows <= width, write a Bambu project 3MF
+    (one filament, template is PLA: the technician applies the ordered material's profile), then set the
+    layer height and wall count."""
     sys.path.insert(0, str(HERE.parent / "tambola"))
     try:
         import functools
@@ -699,7 +706,7 @@ def write_plate(path, name, parts, width=190.0, gap=6.0):
     except ImportError:
         print("  bambu3mf not found: plate skipped")
         return
-    ms = [(n, to_manifold(p)) for n, p in parts]
+    ms = list(parts)
     ms.sort(key=lambda t: -(t[1].bounding_box()[4] - t[1].bounding_box()[1]))
     placed, x, y, row_h = [], 0.0, 0.0, 0.0
     for n, m in ms:
@@ -710,7 +717,7 @@ def write_plate(path, name, parts, width=190.0, gap=6.0):
         placed.append((n, m.translate([x - lo[0], y - lo[1], -lo[2]]), 1))
         x += w + gap
         row_h = max(row_h, h)
-    bambu3mf.write(path, name, placed, [PLATE_COLOUR])
+    bambu3mf.write(path, name, placed, [colour])
     z = zipfile.ZipFile(path)
     items = {i.filename: z.read(i.filename) for i in z.infolist()}
     z.close()
@@ -722,6 +729,14 @@ def write_plate(path, name, parts, width=190.0, gap=6.0):
         for k, v in items.items():
             zo.writestr(k, v)
     print(f"  plate {path.name}: {len(parts)} parts, {x:.0f} x {y + row_h:.0f} mm, layer {LAYER_H}, {WALLS} walls")
+
+
+def make_plates():
+    """One Bambu project per lab order, built from the exported (print-oriented) STLs."""
+    for key, (colour, label, names) in PLATES.items():
+        parts = [(n, load_stl(OUT[n].with_suffix(".stl"), np.zeros(3))) for n in names]
+        write_plate(HERE / f"watch_case_{key}_{VER}.3mf", f"watch_case_{key}", parts, colour)
+        print(f"    {key}: {label}: {', '.join(names)}")
 
 
 # ---------- renders ----------
@@ -837,6 +852,9 @@ def renders(M, prints):
 
 
 if __name__ == "__main__":
+    if "--plates" in sys.argv:                            # re-plate from the exported STLs only
+        make_plates()
+        sys.exit()
     static_checks()
     print("building parts ...")
     caseA, cbA = case_a_part(), caseback_a_part()
@@ -882,7 +900,6 @@ if __name__ == "__main__":
     for n, p in prints + carrier_prints:
         export(p, OUT[n])
     print("exported", ", ".join(n for n, _ in prints + carrier_prints))
-    write_plate(OUT_PLATE, "watch_case", prints)
-    write_plate(OUT_CARRIERS, "watch_case_carriers", carrier_prints)
+    make_plates()
     renders(M, prints + carrier_prints)
     print("wrote render_A.png, render_B.png, render_parts.png")

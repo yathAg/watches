@@ -23,12 +23,22 @@ The parametric source is `watch_case.py` (build123d + manifold3d); everything he
 | Crown | `crown_M2x5_V1`, `crown_M2x6_V1` | Fluted cap that screws onto the stem. Use the one that matches your screw. |
 | Crystal dummy | `crystal_dummy_V1` | 38 × 1.5 disc for fit tests until the real crystal arrives. |
 
-Plates are Bambu Studio projects at 0.12 mm layers with 3 walls. Weights come from a Bambu Studio CLI slice, PLA, and neither plate gives a slicer warning.
+There is one plate per lab order, because each order is one material and colour. Plates are Bambu Studio projects at 0.12 mm layers with 3 walls. Weights come from a Bambu Studio CLI slice and none of the plates gives a slicer warning. The dummy crystal is not printed.
 
-| Plate | What's on it | Weight | Time |
+| Order | Plate | Parts | Sliced |
 |---|---|---|---|
-| `watch_case_plate_V1.3mf` | Both cases, caseback, bezel, dial ring, both crowns, dummy crystal | 16.2 g | ~61 min |
-| `watch_case_carriers_V1.3mf` | The 3 carriers. PETG is best because they are flexures; PLA is OK for a first test. | 5.1 g | ~40 min |
+| PLA, black | `watch_case_black_V1.3mf` | Case A, caseback A, case B, bezel B, dial ring, both crowns | 14.1 g, ~53 min |
+| PLA, silver | `watch_case_silver_V1.3mf` | Bezel B, dial ring, both crowns | 2.0 g, ~17 min |
+| PETG, black | `watch_case_carriers_V1.3mf` | The 3 carriers (flexures, so PETG) | 5.2 g (PLA template), ~39 min |
+
+The silver parts swap onto the black cases, so one set of cases gives four looks:
+
+| | Full black | Black + silver |
+|---|---|---|
+| **A** | Black case, dial ring and crown | Black case, silver dial ring and crown |
+| **B** | Black body, bezel and crown | Black body, silver bezel and crown |
+
+`python watch_case.py --plates` re-plates from the exported STLs; the lists are in `PLATES`.
 
 STEP files are included only for the parts a resin or metal vendor would make: the cases, caseback, bezel and crowns. Run `python watch_case.py` to regenerate everything. The repo copy skips the 3MF plates, because their writer lives in the 3Dprints workspace.
 
